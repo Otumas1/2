@@ -1,53 +1,73 @@
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { SSEServerTransport } = require('@modelcontextprotocol/sdk/server/sse.js');
+const { z } = require('zod');
 const express = require('express');
-const { McpServer, SSEServerTransport } = require('@modelcontextprotocol/sdk');
-const z = require('zod');
 
-// 初始化 MCP 服务器
+const app = express();
+const PORT = process.env.PORT || 8080;
+
 const server = new McpServer({
-  name: 'csgo-price-server',
-  version: '1.0.0'
+  name: "csgo-skin-price",
+  version: "1.0.0",
+  description: "Query CS:GO skin prices from Steam",
 });
 
-// 工具：查询单一饰品价格
 server.tool(
-  'get_skin_price',
-  '查询 Counter-Strike 2 饰品当前最低价（来源：Steam 市场）',
+  "get_skin_price",
+  "Get the current price and volume of a CS:GO skin from the Steam Community Market.",
   {
-    name: z.string().describe('饰品完整名称，如 "AK-47 | Redline (Field-Tested)"')
+    skin_name: z.string().describe("Full market hash name, e.g. 'AK-47 | Redline (Field-Tested)'"),
   },
-  async ({ name }) => {
+  async ({ skin_name }) => {
+    const pricingUrl = `https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name=${encodeURIComponent(skin_name)}`;
+    const listingUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(skin_name)}`;
+
     try {
-      const response = await fetch(
-        `https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name=${encodeURIComponent(name)}`
-      );
+      const response = await fetch(pricingUrl); // 直接用 Node 18+ 自带的 fetch
+      if (!response.ok) throw new Error("Market API unreachable");
       const data = await response.json();
-      if (!data.success) return { error: '未找到该饰品' };
-      return {
-        name,
-        lowest_price: data.lowest_price || '未知',
-        volume: data.volume || '0'
+
+      if (!data || !data.success) {
+        return {
+          content: [{ type: "text", text: `Could not find price for "${skin_name}". Check the name.` }],
+        };
+      }
+
+      const result = {
+        name: skin_name,
+        lowest_price: data.lowest_price || "N/A",
+        median_price: data.median_price || "N/A",
+        volume: data.volume || "N/A",
+        listing_url: listingUrl,
       };
-    } catch (e) {
-      return { error: e.message };
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Error fetching price: ${err.message}` }],
+      };
     }
   }
 );
 
-const app = express();
+let transport;
 
-// SSE 端点
-app.get('/sse', async (req, res) => {
-  const transport = new SSEServerTransport('/message', res);
+app.get("/sse", async (req, res) => {
+  console.log("New SSE connection");
+  transport = new SSEServerTransport("/messages", res);
   await server.connect(transport);
 });
 
-// 消息端点（SSE 双向通信需要）
-app.post('/message', async (req, res) => {
-  const transport = new SSEServerTransport('/message', res);
-  await server.connect(transport);
+app.post("/messages", async (req, res) => {
+  if (transport) {
+    await transport.handlePostMessage(req, res);
+  } else {
+    res.status(503).send("No active SSE transport");
+  }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`MCP server running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`CS:GO MCP server running on port ${PORT}`);
 });
