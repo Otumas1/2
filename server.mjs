@@ -1,12 +1,13 @@
-const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
-const { SSEServerTransport } = require('@modelcontextprotocol/sdk/server/sse.js');
-const { z } = require('zod');
-const express = require('express');
+// server.mjs （使用 ESM）
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { z } from 'zod';
+import express from 'express';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// ✅ 健康检查路由（解决 "Application failed to respond"）
+// 健康检查路由
 app.get('/', (req, res) => {
   res.send('CS:GO MCP Server is running.');
 });
