@@ -6,6 +6,11 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// ✅ 健康检查路由（解决 "Application failed to respond"）
+app.get('/', (req, res) => {
+  res.send('CS:GO MCP Server is running.');
+});
+
 const server = new McpServer({
   name: "csgo-skin-price",
   version: "1.0.0",
@@ -23,7 +28,7 @@ server.tool(
     const listingUrl = `https://steamcommunity.com/market/listings/730/${encodeURIComponent(skin_name)}`;
 
     try {
-      const response = await fetch(pricingUrl); // 直接用 Node 18+ 自带的 fetch
+      const response = await fetch(pricingUrl);
       if (!response.ok) throw new Error("Market API unreachable");
       const data = await response.json();
 
